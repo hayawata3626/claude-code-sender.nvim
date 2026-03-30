@@ -65,7 +65,23 @@ local function send_cmux(text)
     return false
   end
 
-  vim.fn.system(string.format("%s send --surface %s %s", bin, target, vim.fn.shellescape(text)))
+  -- Use set-buffer + paste-buffer to handle large text safely
+  local tmpfile = vim.fn.tempname()
+  local f = io.open(tmpfile, "w")
+  if not f then
+    vim.notify("claude-code-sender: Failed to create temp file", vim.log.levels.ERROR)
+    return false
+  end
+  f:write(text)
+  f:close()
+
+  vim.fn.system(string.format('%s set-buffer "$(cat %s)"', bin, vim.fn.shellescape(tmpfile)))
+  vim.fn.delete(tmpfile)
+  if vim.v.shell_error ~= 0 then
+    return false
+  end
+
+  vim.fn.system(string.format("%s paste-buffer --surface %s", bin, target))
   if vim.v.shell_error ~= 0 then
     return false
   end
