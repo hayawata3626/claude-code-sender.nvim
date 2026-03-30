@@ -7,7 +7,7 @@ local defaults = {
   multiplexer = "auto",
 
   cmux = {
-    bin = "/Applications/cmux.app/Contents/Resources/bin/cmux",
+    bin = vim.fn.exepath("cmux") ~= "" and vim.fn.exepath("cmux") or "/Applications/cmux.app/Contents/Resources/bin/cmux",
     -- Target surface ID (e.g. "surface:50"). nil = auto-detect.
     surface_id = nil,
   },

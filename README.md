@@ -56,7 +56,7 @@ require("claude-code-sender").setup({
   multiplexer = "auto",
 
   cmux = {
-    bin = "/Applications/cmux.app/Contents/Resources/bin/cmux",
+    bin = "cmux", -- auto-detected from PATH, or set full path
     surface_id = nil, -- auto-detect, or set e.g. "surface:50"
   },
 
@@ -84,6 +84,24 @@ require("claude-code-sender").setup({
 | --- | --- | --- |
 | `<leader>ac` | Visual | Send selection to Claude Code |
 | `<leader>al` | Normal | Send current line to Claude Code |
+
+## Troubleshooting
+
+### "Could not find Claude Code surface/pane"
+
+Make sure Claude Code is fully started (showing the `>` prompt) in a pane within the same cmux workspace or tmux session.
+
+### cmux binary not found
+
+If `cmux` is not in your PATH, set the full path:
+
+```lua
+opts = {
+  cmux = {
+    bin = "/Applications/cmux.app/Contents/Resources/bin/cmux",
+  },
+}
+```
 
 ## License
 
