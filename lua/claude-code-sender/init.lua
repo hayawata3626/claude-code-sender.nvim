@@ -65,21 +65,7 @@ local function send_cmux(text)
     return false
   end
 
-  -- Write to temp file to avoid shell escaping issues
-  local tmpfile = vim.fn.tempname()
-  local f = io.open(tmpfile, "w")
-  if not f then
-    vim.notify("claude-code-sender: Failed to create temp file", vim.log.levels.ERROR)
-    return false
-  end
-  f:write(text)
-  f:close()
-
-  local content = vim.fn.readfile(tmpfile)
-  vim.fn.delete(tmpfile)
-  local safe_text = table.concat(content, "\n")
-
-  vim.fn.system(string.format("%s send --surface %s %s", bin, target, vim.fn.shellescape(safe_text)))
+  vim.fn.system(string.format("%s send --surface %s %s", bin, target, vim.fn.shellescape(text)))
   if vim.v.shell_error ~= 0 then
     return false
   end
@@ -109,7 +95,7 @@ local function send_tmux(text)
   f:write(text)
   f:close()
 
-  vim.fn.system(string.format("%s load-buffer %s", bin, tmpfile))
+  vim.fn.system(string.format("%s load-buffer %s", bin, vim.fn.shellescape(tmpfile)))
   vim.fn.delete(tmpfile)
   if vim.v.shell_error ~= 0 then
     return false
