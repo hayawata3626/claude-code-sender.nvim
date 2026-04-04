@@ -18,13 +18,28 @@ local defaults = {
     pane_id = nil,
   },
 
-  -- Set to false to disable default keymaps
-  keymaps = {
-    send_selection = "<leader>ac", -- Visual mode
-    send_line = "<leader>al", -- Normal mode
+  -- Project context options
+  project_context = {
+    -- Automatically prepend CLAUDE.md content to every prompt
+    inject_claude_md = true,
   },
 
-  -- Format function for the prompt sent to Claude Code
+  -- Prompt templates shown in send_with_template picker.
+  -- These are ADDED to the built-in defaults; set to {} to use defaults only.
+  -- Each entry: { label = "...", prompt = "..." }
+  templates = {},
+
+  -- Set to false to disable default keymaps
+  keymaps = {
+    send_selection       = "<leader>ac", -- Visual mode
+    send_line            = "<leader>al", -- Normal mode
+    send_buffer          = "<leader>ab", -- Normal mode: send whole buffer
+    send_diagnostics     = "<leader>ae", -- Normal/Visual: send LSP diagnostics + code
+    send_git_diff        = "<leader>ag", -- Normal mode: send git diff
+    send_with_template   = "<leader>at", -- Visual mode: pick template then send
+  },
+
+  -- Format function for the code block portion of a prompt
   ---@param file string relative file path
   ---@param start_line number
   ---@param end_line number

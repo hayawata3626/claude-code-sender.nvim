@@ -1,5 +1,7 @@
 local M = {}
 local Config = require("claude-code-sender.config")
+local Context = require("claude-code-sender.context")
+local Templates = require("claude-code-sender.templates")
 
 -- Detect which multiplexer is available
 ---@return "cmux" | "tmux" | nil
@@ -155,6 +157,13 @@ function M.send(text)
   end
 end
 
+-- Apply project context (CLAUDE.md injection) to a prompt
+---@param prompt string
+---@return string
+local function with_context(prompt)
+  return Context.with_project_context(prompt, Config.options.project_context)
+end
+
 -- Send visual selection with file context
 function M.send_selection()
   local start_line = vim.fn.line("v")
@@ -171,7 +180,7 @@ function M.send_selection()
   local ft = vim.bo.filetype
 
   local prompt = Config.options.format(file, start_line, end_line, ft, text)
-  M.send(prompt)
+  M.send(with_context(prompt))
 end
 
 -- Send current line with file context
@@ -182,7 +191,102 @@ function M.send_line()
   local ft = vim.bo.filetype
 
   local prompt = Config.options.format(file, line_nr, line_nr, ft, line)
-  M.send(prompt)
+  M.send(with_context(prompt))
+end
+
+-- Send entire buffer with file context
+function M.send_buffer()
+  local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+  local text = table.concat(lines, "\n")
+  local file = vim.fn.expand("%:.")
+  local ft = vim.bo.filetype
+  local line_count = #lines
+
+  local prompt = Config.options.format(file, 1, line_count, ft, text)
+  M.send(with_context(prompt))
+end
+
+-- Send LSP diagnostics for a line range (or current line in normal mode)
+---@param start_line number|nil 1-indexed; defaults to current line
+---@param end_line number|nil 1-indexed; defaults to start_line
+function M.send_diagnostics(start_line, end_line)
+  local bufnr = vim.api.nvim_get_current_buf()
+  start_line = start_line or vim.fn.line(".")
+  end_line = end_line or start_line
+
+  local file = vim.fn.expand("%:.")
+  local ft = vim.bo.filetype
+
+  -- Get the code for context
+  local code_lines = vim.fn.getline(start_line, end_line)
+  if type(code_lines) == "string" then
+    code_lines = { code_lines }
+  end
+  local code_text = table.concat(code_lines, "\n")
+
+  local diag_text = Context.get_diagnostics(bufnr, start_line, end_line)
+
+  local location = start_line == end_line
+    and string.format("%s:%d", file, start_line)
+    or string.format("%s:%d-%d", file, start_line, end_line)
+
+  local parts = {}
+  if diag_text ~= "" then
+    table.insert(parts, string.format("# LSP Diagnostics (%s)\n\n%s", location, diag_text))
+  else
+    table.insert(parts, string.format("# No LSP Diagnostics (%s)", location))
+  end
+  table.insert(parts, Config.options.format(file, start_line, end_line, ft, code_text))
+
+  local prompt = table.concat(parts, "\n\n")
+  M.send(with_context(prompt))
+end
+
+-- Send visual-selection diagnostics (called from visual mode)
+function M.send_diagnostics_selection()
+  local start_line = vim.fn.line("v")
+  local end_line = vim.fn.line(".")
+  if start_line > end_line then
+    start_line, end_line = end_line, start_line
+  end
+  M.send_diagnostics(start_line, end_line)
+end
+
+-- Send git diff (unstaged by default)
+---@param staged boolean|nil if true, send staged diff
+function M.send_git_diff(staged)
+  local diff = Context.get_git_diff(staged)
+  if not diff then
+    vim.notify("claude-code-sender: No git diff found (or not a git repo)", vim.log.levels.WARN)
+    return
+  end
+
+  local title = staged and "# Git Diff (staged changes)" or "# Git Diff (unstaged changes)"
+  local prompt = string.format("%s\n\n```diff\n%s\n```", title, diff)
+  M.send(with_context(prompt))
+end
+
+-- Show template picker then send visual selection with the chosen prompt prefix
+function M.send_with_template()
+  local start_line = vim.fn.line("v")
+  local end_line = vim.fn.line(".")
+  if start_line > end_line then
+    start_line, end_line = end_line, start_line
+  end
+  local lines = vim.fn.getline(start_line, end_line)
+  if type(lines) == "string" then
+    lines = { lines }
+  end
+  local text = table.concat(lines, "\n")
+  local file = vim.fn.expand("%:.")
+  local ft = vim.bo.filetype
+
+  local templates = Templates.merge(Config.options.templates)
+  Templates.pick(templates, function(template_prompt)
+    local code_block = Config.options.format(file, start_line, end_line, ft, text)
+    local prompt = template_prompt .. code_block
+    M.send(with_context(prompt))
+  end)
 end
 
 -- Setup keymaps
@@ -202,6 +306,33 @@ local function setup_keymaps()
     vim.keymap.set("n", keymaps.send_line, function()
       M.send_line()
     end, { desc = "Send current line to Claude Code", silent = true })
+  end
+
+  if keymaps.send_buffer then
+    vim.keymap.set("n", keymaps.send_buffer, function()
+      M.send_buffer()
+    end, { desc = "Send buffer to Claude Code", silent = true })
+  end
+
+  if keymaps.send_diagnostics then
+    vim.keymap.set("n", keymaps.send_diagnostics, function()
+      M.send_diagnostics()
+    end, { desc = "Send diagnostics + current line to Claude Code", silent = true })
+    vim.keymap.set("v", keymaps.send_diagnostics, function()
+      M.send_diagnostics_selection()
+    end, { desc = "Send diagnostics + selection to Claude Code", silent = true })
+  end
+
+  if keymaps.send_git_diff then
+    vim.keymap.set("n", keymaps.send_git_diff, function()
+      M.send_git_diff()
+    end, { desc = "Send git diff to Claude Code", silent = true })
+  end
+
+  if keymaps.send_with_template then
+    vim.keymap.set("v", keymaps.send_with_template, function()
+      M.send_with_template()
+    end, { desc = "Send selection to Claude Code with template", silent = true })
   end
 end
 
